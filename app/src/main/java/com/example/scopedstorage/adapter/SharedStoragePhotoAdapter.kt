@@ -34,7 +34,7 @@ class SharedStoragePhotoAdapter(private val onPhotoClick: (SharedStoragePhoto) -
 
         fun bind(photo: SharedStoragePhoto) {
             binding.apply {
-                ivPhoto.setImageURI(photo.contentUri)
+                ivPhoto.setImageBitmap(photo.contentUri)
 
                 val aspectRatio = photo.width.toFloat() / photo.height.toFloat()
                 ConstraintSet().apply {

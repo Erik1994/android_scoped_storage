@@ -1,11 +1,11 @@
 package com.example.scopedstorage.model
 
-import android.net.Uri
+import android.graphics.Bitmap
 
 data class SharedStoragePhoto(
     val id: Long,
     val name: String,
     val width: Int,
     val height: Int,
-    val contentUri: Uri
+    val contentUri: Bitmap
 )

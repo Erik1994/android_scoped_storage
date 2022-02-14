@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Scoped Storage</string>
+    <string name="app_name">Android Storage</string>
     <string name="your_private_photos">Your private photos</string>
     <string name="shared_photos">Shared photos</string>
     <string name="private_text">Private</string>
