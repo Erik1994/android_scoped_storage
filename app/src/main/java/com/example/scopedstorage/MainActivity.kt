@@ -2,6 +2,7 @@ package com.example.scopedstorage
 
 import android.Manifest
 import android.app.AlertDialog
+import android.app.RecoverableSecurityException
 import android.content.*
 import android.content.pm.PackageManager
 import android.database.ContentObserver
@@ -13,6 +14,8 @@ import android.os.Bundle
 import android.provider.MediaStore
 import android.provider.Settings
 import android.widget.Toast
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -37,6 +40,7 @@ class MainActivity : AppCompatActivity() {
     private var internalStoragePhotoAdapter: InternalStoragePhotoAdapter? = null
     private var externalStoragePhotoAdapter: SharedStoragePhotoAdapter? = null
     private val resultContract = ActivityResultContracts.TakePicturePreview()
+    private var intentSenderLauncher: ActivityResultLauncher<IntentSenderRequest>? = null
 
     private val contentObserver = object : ContentObserver(null) {
         override fun onChange(selfChange: Boolean) {
@@ -91,6 +95,13 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         binding?.let { setContentView(it.root) }
+        intentSenderLauncher = registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) {
+            if (it.resultCode == RESULT_OK) {
+                Toast.makeText(this@MainActivity, "Photo successfully deleted", Toast.LENGTH_LONG).show()
+            } else {
+                Toast.makeText(this@MainActivity, "Photo couldn't be deleted", Toast.LENGTH_LONG).show()
+            }
+        }
         setUpInternalStoragePhotoRv()
         setUpExternalStoragePhotoRv()
         observeData()
@@ -161,13 +172,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun setUpExternalStoragePhotoRv() = binding?.rvPublicPhotos?.apply {
         externalStoragePhotoAdapter = SharedStoragePhotoAdapter {
-//            val isDeltaionIsSuccessFully = deletePhotoFromInternalStorage(it.name)
-//            if (isDeltaionIsSuccessFully) {
-//                setInternalStoragePhotoToResyclerView()
-//                Toast.makeText(context, "Photo successfully deleted", Toast.LENGTH_LONG).show()
-//            } else {
-//                Toast.makeText(context, "Failed to delete photo", Toast.LENGTH_LONG).show()
-//            }
+            lifecycleScope.launch {
+                deletePhotoFromExternalStorage(it.contentUri)
+            }
         }
         adapter = externalStoragePhotoAdapter
         layoutManager = StaggeredGridLayoutManager(3, RecyclerView.VERTICAL)
@@ -279,7 +286,7 @@ class MainActivity : AppCompatActivity() {
                 projection,
                 null,
                 null,
-                "${MediaStore.Images.Media.DISPLAY_NAME} ASC"
+                "${MediaStore.Images.Media.DATE_ADDED} DESC"
             )?.use { cursor ->
                 val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
                 val displayNameColumn =
@@ -298,12 +305,37 @@ class MainActivity : AppCompatActivity() {
                     )
                     val bitmap = getBitmpFromUri(conentUri)
                     bitmap?.let {
-                        photos.add(SharedStoragePhoto(id, displayName, width, height, it))
+                        photos.add(SharedStoragePhoto(id, displayName, width, height, conentUri, it))
                     }
                     if(photos.size == 50) break
                 }
                 photos.toList()
             } ?: listOf()
+        }
+    }
+
+
+    private suspend fun deletePhotoFromExternalStorage(photoUri: Uri) {
+        withContext(Dispatchers.IO) {
+            try {
+                contentResolver.delete(photoUri, null, null)
+            } catch (e: SecurityException) {
+                val intentSender = when {
+                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.R -> {
+                        MediaStore.createDeleteRequest(contentResolver, listOf(photoUri)).intentSender
+                    }
+                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q -> {
+                        val recoverableSecurityException = e as? RecoverableSecurityException
+                        recoverableSecurityException?.userAction?.actionIntent?.intentSender
+                    }
+                    else -> null
+                }
+                intentSender?.let {
+                    intentSenderLauncher?.launch(
+                        IntentSenderRequest.Builder(it).build()
+                    )
+                }
+            }
         }
     }
 
